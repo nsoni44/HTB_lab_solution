@@ -2,7 +2,7 @@
 
 ## Engagement
 - **Box:** Management
-- **Target IP:** 10.129.244.176
+- **Target IP:** $TARGET
 - **Difficulty:** easy (Linux)
 - **Started:** 2026-09-30
 - **Current Access Level:** root (full stable SSH access via /root/.ssh/id_ed25519, saved to loot/root_id_ed25519)
@@ -33,7 +33,7 @@
 ## Access Obtained
 - Pre-auth RCE as `openam` (uid=996) via CVE-2026-33439
 - SSH shell as `owen` (uid=1000) via password reuse
-- Full root via rdiff-backup restrict-path bypass -> exfiltrated /root/.ssh/id_ed25519 -> stable root SSH (verified: `ssh -i loot/root_id_ed25519 root@10.129.244.176`)
+- Full root via rdiff-backup restrict-path bypass -> exfiltrated /root/.ssh/id_ed25519 -> stable root SSH (verified: `ssh -i loot/root_id_ed25519 root@$TARGET`)
 
 ## Flags
 - **user.txt:** [REDACTED-HTB-FLAG]  [x] CAPTURED (owen, via SSH)

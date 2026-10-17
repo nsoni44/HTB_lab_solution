@@ -5,7 +5,7 @@
 
 ## Engagement
 - **Box:** Cap
-- **Target IP:** 10.129.106.230
+- **Target IP:** $TARGET
 - **Difficulty:** easy (Linux)
 - **Started:** 2026-09-30
 - **Current Access Level:** root

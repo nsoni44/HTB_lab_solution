@@ -5,7 +5,7 @@
 
 ## Engagement
 - **Box:** cohort
-- **Target IP:** 10.129.121.100
+- **Target IP:** $TARGET
 - **Difficulty:** easy
 - **Started:** 2026-10-16
 - **Current Access Level:** Unauthenticated
@@ -72,9 +72,9 @@
 
 ---
 === GLOBAL CONTEXT UPDATE ===
-Target / Access Level: 10.129.121.100 (cohort, easy Linux) / Unauthenticated
+Target / Access Level: $TARGET (cohort, easy Linux) / Unauthenticated
 New verified findings:
-  - tun0 up @ 10.10.15.6; single VPN tunnel (machines_eu-2) — no false-down risk
+  - tun0 up @ $ATTACKER_IP; single VPN tunnel (machines_eu-2) — no false-down risk
   - TCP connect test: 22, 80, 443 reachable (ICMP not relied on)
 Open leads (prioritized): awaiting full recon sweep
 Next agent + task: @Recon_Agent — full TCP sweep + -sC -sV + web/vhost enum
@@ -82,7 +82,7 @@ Next agent + task: @Recon_Agent — full TCP sweep + -sC -sV + web/vhost enum
 
 ---
 === GLOBAL CONTEXT UPDATE ===
-Target / Access Level: cohort.htb (10.129.121.100) / Unauthenticated
+Target / Access Level: cohort.htb ($TARGET) / Unauthenticated
 New verified findings:
   - [partial, from interrupted exploit-agent] POST /api/ws returns 405 => registered route
     (unlike unregistered POST=404). Candidate websocket/registered endpoint. UNVERIFIED by me yet.
@@ -101,7 +101,7 @@ Target / Access Level: cohort.htb / Unauthenticated (SSRF primitive obtained)
 New verified findings:
   - SSRF CONFIRMED & NON-BLIND at POST /api/{v1,v2}/validate {"url":"..."}. Backend fetches
     attacker URL via GET (UA=CohortInsights/1.0) and returns JSON {ok,fetched_status,
-    content_type,preview,message}. Outbound to tun0 (10.10.15.6) confirmed. Evidence: loot/ssrf-callback.log
+    content_type,preview,message}. Outbound to tun0 ($ATTACKER_IP) confirmed. Evidence: loot/ssrf-callback.log
   - Loopback denylist blocks literal 127.0.0.1 / localhost / [::1] ("Internal or loopback
     addresses are not permitted."). BYPASSED via 127.1, 0.0.0.0, 2130706433 (decimal),
     0177.0.0.1 (octal), 127.0.0.2 -> all reach internal services.
@@ -114,7 +114,7 @@ Next agent + task: Orchestrator-driven SSRF internal enumeration
 
 ---
 === GLOBAL CONTEXT UPDATE ===
-Target / Access Level: cohort.htb (10.129.121.100) / Unauthenticated (no foothold yet)
+Target / Access Level: cohort.htb ($TARGET) / Unauthenticated (no foothold yet)
 VERIFIED MAP (complete):
   External: 22 SSH(OpenSSH 9.6p1), 80/443 nginx 1.24.0 -> SPA(AES-GCM-encrypted app.js,
     decrypted: marketing site + source-validator only) + POST /api/{v1,v2,/}validate (SSRF).
@@ -186,14 +186,14 @@ source]; watch beacon + try SSH 22; only then wait one ~10min cron window.
 
 ---
 === GLOBAL CONTEXT UPDATE ===
-Target / Access Level: cohort.htb (10.129.121.100) / FOOTHOLD as marimo (uid=1000) via marimo WS PTY
+Target / Access Level: cohort.htb ($TARGET) / FOOTHOLD as marimo (uid=1000) via marimo WS PTY
 BREAKTHROUGH (resolves prior SSRF->WS dead-end):
   - Prior dead-end was WRONG METHOD: I probed WS-upgrade only on default vhost cohort.htb.
     nginx proxies the marimo WebSocket ONLY on a NAMED internal vhost, discoverable via SSRF.
   - SSRF GET http://127.1/status (loopback bypass of nginx `allow 127.0.0.1; deny all`) leaks
     the nginx upstream map: upstream "notebooks" host=nb-1be3782a8afd3ad5.cohort.htb -> 127.0.0.1:8888.
     Evidence: web/ssrf-status-leak.txt
-  - Added `10.129.121.100 nb-1be3782a8afd3ad5.cohort.htb` to /etc/hosts. GET https://<vhost>/
+  - Added `$TARGET nb-1be3782a8afd3ad5.cohort.htb` to /etc/hosts. GET https://<vhost>/
     -> 303 /auth/login; /api/version = 0.20.4 (marimo, vuln CVE-2026-39987).
   - CVE-2026-39987 (marimo <=0.20.4) pre-auth RCE: WSS /terminal/ws spawns a PTY as marimo
     with NO auth. Raw-bytes protocol (send "cmd\n", recv terminal bytes). Confirmed id=
@@ -209,13 +209,13 @@ Next agent + task: @PrivEsc_Agent (linux-privesc skill) — enumerate via WS PTY
 
 ---
 === GLOBAL CONTEXT UPDATE ===
-Target / Access Level: cohort.htb (10.129.244.174 — NEW IP, box respawned) / FOOTHOLD as marimo (uid=1000)
+Target / Access Level: cohort.htb ($TARGET — NEW IP, box respawned) / FOOTHOLD as marimo (uid=1000)
 New verified findings:
-  - Box respawned: IP 10.129.121.100 -> 10.129.244.174. /etc/hosts repointed (bind-mount, rewritten in place).
+  - Box respawned: IP $TARGET -> $TARGET. /etc/hosts repointed (bind-mount, rewritten in place).
   - Internal marimo vhost hash UNCHANGED: nb-1be3782a8afd3ad5.cohort.htb -> 127.0.0.1:8888 (re-leaked via SSRF /status).
   - marimo still 0.20.4. CVE-2026-39987 WS PTY foothold re-established via loot/ws_exec.py. id=uid=1000(marimo), host cohort, kernel 6.8.0-136-generic Ubuntu 24.04.
   - NEW user.txt (respawn-rotated): [REDACTED-HTB-FLAG]
-  - ENV FIX: dual VPN tunnel (tun0+tun1, both 10.10.15.6) caused intermittent false-downs (0/10 connects).
+  - ENV FIX: dual VPN tunnel (tun0+tun1, both $ATTACKER_IP) caused intermittent false-downs (0/10 connects).
     Killed stale newer openvpn (PIDs 129369-grp) -> single tun0 -> 10/10 stable. (Cap lesson, reconfirmed.)
 Open leads (prioritized): privesc marimo->root. Parked lead: CVE-2026-41651 (PackageKit/polkit simulate-flag
   race -> root via .deb postinst) — VERIFY LOCALLY before committing. Operator provided only generic HTB phase
@@ -225,7 +225,7 @@ Next agent + task: @PrivEsc_Agent (linux-privesc skill) — enumerate via WS PTY
 
 ---
 === GLOBAL CONTEXT UPDATE ===
-Target / Access Level: cohort.htb (10.129.244.174) / ROOT (euid=0) — BOX OWNED
+Target / Access Level: cohort.htb ($TARGET) / ROOT (euid=0) — BOX OWNED
 New verified findings (PRIVESC marimo -> root):
   - VECTOR (WORKING): CVE-2026-41651 "Pack2TheRoot" — PackageKit 1.2.8 TOCTOU LPE.
     packagekitd runs as root (PID 1995). Two async D-Bus InstallFiles calls on one transaction:

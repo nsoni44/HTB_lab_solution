@@ -19,7 +19,24 @@
 !STORY.md
 !CTF_GUIDE.md
 
-# 4) Keep this control file itself (root only).
+# 4) Whitelist images that the writeups actually embed (so docs render on git).
+#    Only the screenshots referenced by Touch/WALKTHROUGH.md — the other ~290
+#    screenshots in that loot/ dir stay ignored. These show the kiosk-escape
+#    chain (a couple display user.txt on-screen; kept intentionally per request).
+!Touch/loot/rdp_screens/00_initial_connect.png
+!Touch/loot/rdp_screens/01_self_checkin_home.png
+!Touch/loot/rdp_screens/02_winu_easeofaccess.png
+!Touch/loot/rdp_screens/06_narrator_guide_click.png
+!Touch/loot/rdp_screens/07_narrator_guide_after_enter.png
+!Touch/loot/rdp_screens/08_file_users.png
+!Touch/loot/rdp_screens/09_kioskuser_desktop.png
+!Touch/loot/rdp_screens/11_usertxt_clean.png
+!Touch/loot/rdp_screens/19_filetype_dropdown.png
+!Touch/loot/rdp_screens/20_allfiles_selected.png
+!Touch/loot/rdp_screens/23_after_full_path_enter.png
+!Touch/loot/rdp_screens/24_cmd_whoami_flag.png
+
+# 5) Keep this control file itself (root only).
 !/.gitignore
 
 # ── Notes ──────────────────────────────────────────────────────────────────
