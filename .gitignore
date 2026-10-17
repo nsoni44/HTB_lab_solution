@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Single source of control for all HTB lab folders under easy/.
+# Policy: track ONLY the written deliverables (the Markdown writeups).
+# Everything else — recon evidence, loot, private keys, PoC exploits, tooling,
+# PDFs/HTML, pcaps, screenshots — is ignored and never leaves this machine.
+# ─────────────────────────────────────────────────────────────────────────
+
+# 1) Ignore everything by default.
+*
+
+# 2) …but let git descend into subdirectories so it can find the files below.
+!*/
+
+# 3) Whitelist the deliverable docs (these names are kept at any depth).
+!GLOBAL_CONTEXT.md
+!WALKTHROUGH.md
+!walkthrough.md
+!REPORT.md
+!STORY.md
+!CTF_GUIDE.md
+
+# 4) Keep this control file itself (root only).
+!/.gitignore
+
+# ── Notes ──────────────────────────────────────────────────────────────────
+# • To also publish a lab's tooling or evidence, add a targeted exception, e.g.:
+#       !cohort/00try/ws_exec.py
+#   (place it AFTER the rules above so it wins).
+# • HTB flags in the tracked Markdown are redacted to [REDACTED-HTB-FLAG].
+#   Credentials/passwords in the writeups are NOT redacted — review before
+#   making the repo public, and confirm each machine is retired per HTB rules.
